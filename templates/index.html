@@ -13,7 +13,10 @@
         <h1>Order Ticket</h1>
         <p class="muted">Tie every order to a table or a takeout/delivery ticket.</p>
       </div>
-      <button class="primary" id="submit-order">Send Order</button>
+      <div class="pos__header-actions">
+        <button class="ghost" id="open-printer-settings">Admin</button>
+        <button class="primary" id="submit-order">Send Order</button>
+      </div>
     </header>
 
     <section class="pos__body">
@@ -179,6 +182,60 @@
       <div class="modal__footer">
         <button class="ghost" data-action="close">Cancel</button>
         <button class="primary" id="confirm-payment">Finalize Payment</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal is-hidden" id="printer-modal" aria-hidden="true">
+    <div class="modal__backdrop" data-action="close-printer"></div>
+    <div class="modal__content modal__content--wide" role="dialog" aria-modal="true">
+      <div class="modal__header">
+        <h2>Printer Configuration (Admin)</h2>
+        <button class="ghost" data-action="close-printer">Close</button>
+      </div>
+      <div class="modal__body printer-modal__body">
+        <section class="printer-modal__section">
+          <h3>Connected Printers</h3>
+          <div id="printer-list" class="printer-list muted">No printers configured.</div>
+          <form id="printer-form" class="printer-form">
+            <label>
+              Name
+              <input id="printer-name" type="text" placeholder="Kitchen Line 1" />
+            </label>
+            <label>
+              Connection Type
+              <select id="printer-type">
+                <option value="escpos">ESC/POS Network or USB</option>
+                <option value="driver">Platform Driver</option>
+              </select>
+            </label>
+            <label>
+              Device Identifier
+              <input id="printer-device" type="text" placeholder="192.168.10.25:9100 or Printer Queue" />
+            </label>
+            <button class="primary" type="submit">Add Printer</button>
+          </form>
+        </section>
+        <section class="printer-modal__section">
+          <h3>Print Routing</h3>
+          <label>
+            Kitchen Tickets
+            <select id="kitchen-printer-select"></select>
+          </label>
+          <label>
+            Customer Receipts
+            <select id="receipt-printer-select"></select>
+          </label>
+          <button class="primary" id="save-printer-mapping">Save Routing</button>
+          <p class="muted" id="printer-mapping-status"></p>
+        </section>
+        <section class="printer-modal__section">
+          <h3>Recent Print Jobs</h3>
+          <div id="print-job-list" class="printer-list muted">No print jobs queued.</div>
+        </section>
+      </div>
+      <div class="modal__footer">
+        <p class="muted">Admin access is restricted to approved managers.</p>
       </div>
     </div>
   </div>
