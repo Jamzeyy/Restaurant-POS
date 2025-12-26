@@ -41,6 +41,7 @@ const receiptDeliveryContactEl = document.getElementById(
   "receipt-delivery-contact"
 );
 const submitOrderBtn = document.getElementById("submit-order");
+const openPrinterSettingsBtn = document.getElementById("open-printer-settings");
 const takePaymentBtn = document.getElementById("take-payment");
 const paymentMethodEl = document.getElementById("payment-method");
 const paymentTenderedEl = document.getElementById("payment-tendered");
@@ -58,6 +59,21 @@ const confirmPaymentBtn = document.getElementById("confirm-payment");
 const paymentMethodInputs = document.querySelectorAll(
   "input[name='payment-method']"
 );
+const printerModalEl = document.getElementById("printer-modal");
+const printerListEl = document.getElementById("printer-list");
+const printerFormEl = document.getElementById("printer-form");
+const printerNameInput = document.getElementById("printer-name");
+const printerTypeSelect = document.getElementById("printer-type");
+const printerDeviceInput = document.getElementById("printer-device");
+const kitchenPrinterSelect = document.getElementById("kitchen-printer-select");
+const receiptPrinterSelect = document.getElementById("receipt-printer-select");
+const savePrinterMappingBtn = document.getElementById("save-printer-mapping");
+const printerMappingStatusEl = document.getElementById(
+  "printer-mapping-status"
+);
+const printJobListEl = document.getElementById("print-job-list");
+
+const ADMIN_PASSCODE = "admin";
 
 const taxRate = window.POS_CONFIG?.taxRate ?? 0;
 const taxRateLabel = document.getElementById("tax-rate");
@@ -393,9 +409,12 @@ const handleOrderSubmit = async () => {
       return;
     }
     orderStatusEl.classList.remove("error");
-    orderStatusEl.textContent = `Order #${data.orderId} saved. Total ${currencyFormatter.format(
-      data.total
-    )}.`;
+    const kitchenPrintMessage = data.kitchenPrintJobId
+      ? " Kitchen ticket queued."
+      : " Kitchen printer not configured.";
+    orderStatusEl.textContent = `Order #${
+      data.orderId
+    } saved. Total ${currencyFormatter.format(data.total)}.${kitchenPrintMessage}`;
     state.currentOrderId = data.orderId;
     state.lastOrderTotal = data.total;
     updatePaymentControls();
@@ -452,7 +471,10 @@ const handlePaymentSubmit = async () => {
       return;
     }
     updatePaymentSummary(data);
-    orderStatusEl.textContent = `Payment recorded for Order #${data.orderId}.`;
+    const receiptPrintMessage = data.receiptPrintJobId
+      ? " Receipt queued."
+      : " Receipt printer not configured.";
+    orderStatusEl.textContent = `Payment recorded for Order #${data.orderId}.${receiptPrintMessage}`;
     orderStatusEl.classList.remove("error");
     state.currentOrderId = null;
     state.lastOrderTotal = 0;
@@ -469,6 +491,117 @@ const handlePaymentSubmit = async () => {
   }
 };
 
+const isAdminUnlocked = () =>
+  window.localStorage.getItem("posAdminUnlocked") === "true";
+
+const requestAdminAccess = () => {
+  if (isAdminUnlocked()) return true;
+  const response = window.prompt("Enter admin passcode to continue:");
+  if (response && response.trim() === ADMIN_PASSCODE) {
+    window.localStorage.setItem("posAdminUnlocked", "true");
+    return true;
+  }
+  window.alert("Incorrect passcode.");
+  return false;
+};
+
+const openPrinterModal = async () => {
+  if (!requestAdminAccess()) return;
+  printerModalEl?.classList.remove("is-hidden");
+  printerModalEl?.setAttribute("aria-hidden", "false");
+  await refreshPrinterConfig();
+};
+
+const closePrinterModal = () => {
+  printerModalEl?.classList.add("is-hidden");
+  printerModalEl?.setAttribute("aria-hidden", "true");
+};
+
+const renderPrinterList = (printers) => {
+  if (!printerListEl) return;
+  if (!printers.length) {
+    printerListEl.textContent = "No printers configured.";
+    return;
+  }
+  printerListEl.innerHTML = "";
+  printers.forEach((printer) => {
+    const row = document.createElement("div");
+    row.className = "printer-list__item";
+    row.innerHTML = `
+      <div class="printer-list__meta">
+        <strong>${printer.name}</strong>
+        <span class="muted">${printer.connection_type.toUpperCase()} · ${
+      printer.device_identifier
+    }</span>
+      </div>
+      <button class="ghost" data-printer-id="${printer.id}">Remove</button>
+    `;
+    row
+      .querySelector("button")
+      .addEventListener("click", async () => {
+        await fetch(`/api/printers/${printer.id}`, { method: "DELETE" });
+        await refreshPrinterConfig();
+      });
+    printerListEl.appendChild(row);
+  });
+};
+
+const renderPrinterOptions = (printers, mapping) => {
+  if (!kitchenPrinterSelect || !receiptPrinterSelect) return;
+  const buildOptions = (selectedId) =>
+    [
+      { id: "", label: "Unassigned" },
+      ...printers.map((printer) => ({
+        id: printer.id,
+        label: `${printer.name} (${printer.connection_type.toUpperCase()})`,
+      })),
+    ]
+      .map(
+        (option) =>
+          `<option value="${option.id}" ${
+            String(option.id) === String(selectedId) ? "selected" : ""
+          }>${option.label}</option>`
+      )
+      .join("");
+
+  kitchenPrinterSelect.innerHTML = buildOptions(mapping.kitchen_printer_id);
+  receiptPrinterSelect.innerHTML = buildOptions(mapping.receipt_printer_id);
+};
+
+const renderPrintJobs = (jobs) => {
+  if (!printJobListEl) return;
+  if (!jobs.length) {
+    printJobListEl.textContent = "No print jobs queued.";
+    return;
+  }
+  printJobListEl.innerHTML = "";
+  jobs.forEach((job) => {
+    const row = document.createElement("div");
+    row.className = "printer-list__item";
+    row.innerHTML = `
+      <div class="printer-list__meta">
+        <strong>${job.job_type.toUpperCase()} · ${job.printer_name}</strong>
+        <span class="muted">${job.status} · ${job.created_at}</span>
+      </div>
+    `;
+    printJobListEl.appendChild(row);
+  });
+};
+
+const refreshPrinterConfig = async () => {
+  const [printersResponse, mappingResponse, jobsResponse] = await Promise.all([
+    fetch("/api/printers"),
+    fetch("/api/printer-mappings"),
+    fetch("/api/print-jobs"),
+  ]);
+  const printersData = await printersResponse.json();
+  const mappingData = await mappingResponse.json();
+  const jobsData = await jobsResponse.json();
+  renderPrinterList(printersData.printers || []);
+  renderPrinterOptions(printersData.printers || [], mappingData.mapping || {});
+  renderPrintJobs(jobsData.jobs || []);
+};
+
 tipInput.addEventListener("input", (event) => {
   state.tip = parseFloat(event.target.value || 0);
   markOrderDirty();
@@ -482,6 +615,7 @@ discountInput.addEventListener("input", (event) => {
 });
 
 submitOrderBtn.addEventListener("click", handleOrderSubmit);
+openPrinterSettingsBtn?.addEventListener("click", openPrinterModal);
 orderTypeSelect.addEventListener("change", () => {
   markOrderDirty();
   updateOrderTypeUI();
@@ -501,6 +635,19 @@ confirmPaymentBtn?.addEventListener("click", handlePaymentSubmit);
 tenderModalEl?.querySelectorAll("[data-action='close']").forEach((button) => {
   button.addEventListener("click", closeTenderModal);
 });
+tenderModalEl?.addEventListener("click", (event) => {
+  if (event.target?.dataset?.action === "close") {
+    closeTenderModal();
+  }
+});
+printerModalEl?.querySelectorAll("[data-action='close-printer']").forEach((button) => {
+  button.addEventListener("click", closePrinterModal);
+});
+printerModalEl?.addEventListener("click", (event) => {
+  if (event.target?.dataset?.action === "close-printer") {
+    closePrinterModal();
+  }
+});
 paymentMethodInputs.forEach((input) => {
   input.addEventListener("change", (event) => {
     const method = event.target.value;
@@ -510,6 +657,59 @@ paymentMethodInputs.forEach((input) => {
     }
     setTenderError("");
   });
+});
+
+printerFormEl?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!printerNameInput || !printerTypeSelect || !printerDeviceInput) return;
+  const payload = {
+    name: printerNameInput.value.trim(),
+    connectionType: printerTypeSelect.value,
+    deviceIdentifier: printerDeviceInput.value.trim(),
+  };
+  const response = await fetch("/api/printers", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const data = await response.json();
+    printerMappingStatusEl.textContent =
+      data.error || "Unable to add printer.";
+    printerMappingStatusEl.classList.add("error");
+    return;
+  }
+  printerMappingStatusEl.textContent = "Printer added.";
+  printerMappingStatusEl.classList.remove("error");
+  printerNameInput.value = "";
+  printerDeviceInput.value = "";
+  await refreshPrinterConfig();
+});
+
+savePrinterMappingBtn?.addEventListener("click", async () => {
+  const payload = {
+    kitchenPrinterId: kitchenPrinterSelect?.value
+      ? Number(kitchenPrinterSelect.value)
+      : null,
+    receiptPrinterId: receiptPrinterSelect?.value
+      ? Number(receiptPrinterSelect.value)
+      : null,
+  };
+  const response = await fetch("/api/printer-mappings", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const data = await response.json();
+    printerMappingStatusEl.textContent =
+      data.error || "Unable to save routing.";
+    printerMappingStatusEl.classList.add("error");
+    return;
+  }
+  printerMappingStatusEl.textContent = "Routing updated.";
+  printerMappingStatusEl.classList.remove("error");
+  await refreshPrinterConfig();
 });
 
 loadMenu();
