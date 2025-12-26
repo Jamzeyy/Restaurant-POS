@@ -106,10 +106,82 @@
           <span>Total</span>
           <strong id="total">$0.00</strong>
         </div>
+        <div class="receipt__actions">
+          <button class="primary" id="take-payment" disabled>Take Payment</button>
+        </div>
+        <div class="receipt__payment-summary" id="payment-summary">
+          <div class="receipt__line">
+            <span>Last Payment</span>
+            <strong id="payment-method">—</strong>
+          </div>
+          <div class="receipt__line">
+            <span>Tendered</span>
+            <strong id="payment-tendered">$0.00</strong>
+          </div>
+          <div class="receipt__line">
+            <span>Change Due</span>
+            <strong id="payment-change">$0.00</strong>
+          </div>
+          <p class="muted" id="payment-status">No payments recorded yet.</p>
+        </div>
         <p class="muted" id="order-status">Ready to send.</p>
       </aside>
     </section>
   </main>
+
+  <div class="modal is-hidden" id="tender-modal" aria-hidden="true">
+    <div class="modal__backdrop" data-action="close"></div>
+    <div class="modal__content" role="dialog" aria-modal="true">
+      <div class="modal__header">
+        <h2>Take Payment</h2>
+        <button class="ghost" data-action="close">Close</button>
+      </div>
+      <div class="modal__body">
+        <div class="tender__summary">
+          <span>Amount Due</span>
+          <strong id="tender-total">$0.00</strong>
+        </div>
+        <div class="tender__methods">
+          <label class="tender__option">
+            <input type="radio" name="payment-method" value="cash" checked />
+            Cash
+          </label>
+          <label class="tender__option">
+            <input type="radio" name="payment-method" value="card" />
+            Credit Card
+          </label>
+        </div>
+        <div class="tender__panel" id="cash-panel">
+          <label class="receipt__input">
+            Amount Tendered
+            <input id="cash-tendered" type="number" min="0" step="0.01" value="0" />
+          </label>
+          <div class="receipt__line">
+            <span>Change Due</span>
+            <strong id="cash-change">$0.00</strong>
+          </div>
+        </div>
+        <div class="tender__panel is-hidden" id="card-panel">
+          <p class="muted">
+            Stripe Terminal ready. Ask guest to tap, insert, or swipe their card.
+          </p>
+          <div class="receipt__line">
+            <span>Gateway</span>
+            <strong>Stripe Terminal</strong>
+          </div>
+          <div class="receipt__line">
+            <span>Status</span>
+            <strong id="card-status">Awaiting authorization</strong>
+          </div>
+        </div>
+        <p class="muted error is-hidden" id="tender-error"></p>
+      </div>
+      <div class="modal__footer">
+        <button class="ghost" data-action="close">Cancel</button>
+        <button class="primary" id="confirm-payment">Finalize Payment</button>
+      </div>
+    </div>
+  </div>
 
   <script>
     window.POS_CONFIG = {

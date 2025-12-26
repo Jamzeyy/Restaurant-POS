@@ -99,6 +99,7 @@ MENU_ITEMS = [
 def connect_db():
     connection = sqlite3.connect(DB_PATH)
     connection.row_factory = sqlite3.Row
+    connection.execute("PRAGMA foreign_keys = ON")
     return connection
 
 
@@ -135,6 +136,34 @@ def init_db():
             price REAL NOT NULL,
             total REAL NOT NULL,
             FOREIGN KEY(order_id) REFERENCES orders(id)
+        )
+        """
+    )
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS payments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            order_id INTEGER NOT NULL,
+            method TEXT NOT NULL,
+            amount_due REAL NOT NULL,
+            amount_tendered REAL NOT NULL,
+            change_due REAL NOT NULL,
+            status TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY(order_id) REFERENCES orders(id)
+        )
+        """
+    )
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS transactions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            payment_id INTEGER NOT NULL,
+            provider TEXT NOT NULL,
+            reference TEXT NOT NULL,
+            status TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY(payment_id) REFERENCES payments(id)
         )
         """
     )
@@ -253,6 +282,97 @@ def create_order():
     connection.close()
 
     return jsonify({"orderId": order_id, "total": total})
+
+
+def _fetch_order_total(cursor, order_id):
+    cursor.execute("SELECT total FROM orders WHERE id = ?", (order_id,))
+    return cursor.fetchone()
+
+
+@app.route("/api/payments", methods=["POST"])
+def create_payment():
+    payload = request.get_json(force=True)
+    order_id = payload.get("orderId")
+    method = payload.get("method")
+    amount_tendered = float(payload.get("amountTendered", 0))
+
+    if not order_id:
+        return jsonify({"error": "Order ID is required."}), 400
+    if method not in {"cash", "card"}:
+        return jsonify({"error": "Payment method is invalid."}), 400
+
+    connection = connect_db()
+    cursor = connection.cursor()
+    order = _fetch_order_total(cursor, order_id)
+    if not order:
+        connection.close()
+        return jsonify({"error": "Order not found."}), 404
+
+    amount_due = float(order["total"])
+    if method == "cash":
+        if amount_tendered < amount_due:
+            connection.close()
+            return (
+                jsonify({"error": "Cash tendered must cover the amount due."}),
+                400,
+            )
+        change_due = round(amount_tendered - amount_due, 2)
+        status = "received"
+        provider = "cash"
+        reference = f"CASH-{order_id}-{int(datetime.utcnow().timestamp())}"
+    else:
+        amount_tendered = amount_due
+        change_due = 0.0
+        status = "approved"
+        provider = "stripe-terminal"
+        reference = f"STR-{order_id}-{int(datetime.utcnow().timestamp())}"
+
+    cursor.execute(
+        """
+        INSERT INTO payments (
+            order_id, method, amount_due, amount_tendered, change_due, status, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            order_id,
+            method,
+            amount_due,
+            amount_tendered,
+            change_due,
+            status,
+            datetime.utcnow().isoformat(),
+        ),
+    )
+    payment_id = cursor.lastrowid
+    cursor.execute(
+        """
+        INSERT INTO transactions (
+            payment_id, provider, reference, status, created_at
+        ) VALUES (?, ?, ?, ?, ?)
+        """,
+        (
+            payment_id,
+            provider,
+            reference,
+            status,
+            datetime.utcnow().isoformat(),
+        ),
+    )
+    connection.commit()
+    connection.close()
+
+    return jsonify(
+        {
+            "paymentId": payment_id,
+            "orderId": order_id,
+            "method": method,
+            "amountDue": amount_due,
+            "amountTendered": amount_tendered,
+            "changeDue": change_due,
+            "status": status,
+            "reference": reference,
+        }
+    )
 
 
 @app.route("/api/orders/<int:order_id>")

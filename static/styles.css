@@ -170,6 +170,18 @@ body {
   gap: 12px;
 }
 
+.receipt__actions {
+  display: flex;
+  justify-content: space-between;
+}
+
+.receipt__payment-summary {
+  border-top: 1px solid #edf0f6;
+  padding-top: 12px;
+  display: grid;
+  gap: 8px;
+}
+
 .receipt__line {
   display: flex;
   justify-content: space-between;
@@ -190,6 +202,11 @@ body {
   border-radius: 999px;
   font-weight: 600;
   cursor: pointer;
+}
+
+.primary:disabled {
+  background: #93c5fd;
+  cursor: not-allowed;
 }
 
 .ghost,
@@ -235,6 +252,69 @@ body {
 
 .error {
   color: #b91c1c;
+}
+
+.modal {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  z-index: 100;
+}
+
+.modal__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+}
+
+.modal__content {
+  position: relative;
+  background: #fff;
+  border-radius: 16px;
+  padding: 20px;
+  width: min(480px, 92vw);
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.25);
+  display: grid;
+  gap: 16px;
+}
+
+.modal__header,
+.modal__footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.modal__body {
+  display: grid;
+  gap: 16px;
+}
+
+.tender__summary {
+  display: flex;
+  justify-content: space-between;
+  padding: 12px;
+  border-radius: 12px;
+  background: #f8fafc;
+  font-size: 16px;
+}
+
+.tender__methods {
+  display: flex;
+  gap: 16px;
+}
+
+.tender__option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.tender__panel {
+  display: grid;
+  gap: 12px;
 }
 
 @media (max-width: 1100px) {
