@@ -636,7 +636,8 @@ tenderModalEl?.querySelectorAll("[data-action='close']").forEach((button) => {
   button.addEventListener("click", closeTenderModal);
 });
 tenderModalEl?.addEventListener("click", (event) => {
-  if (event.target?.dataset?.action === "close") {
+  const closeTarget = event.target?.closest?.("[data-action='close']");
+  if (closeTarget) {
     closeTenderModal();
   }
 });
@@ -644,7 +645,8 @@ printerModalEl?.querySelectorAll("[data-action='close-printer']").forEach((butto
   button.addEventListener("click", closePrinterModal);
 });
 printerModalEl?.addEventListener("click", (event) => {
-  if (event.target?.dataset?.action === "close-printer") {
+  const closeTarget = event.target?.closest?.("[data-action='close-printer']");
+  if (closeTarget) {
     closePrinterModal();
   }
 });

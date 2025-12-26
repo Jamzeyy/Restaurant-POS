@@ -291,6 +291,25 @@ body {
   align-items: center;
 }
 
+.modal__close {
+  border: 1px solid #d4d8e5;
+  background: #fff;
+  color: #1f2937;
+  border-radius: 999px;
+  width: 34px;
+  height: 34px;
+  font-size: 20px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.modal__close:hover {
+  background: #f3f4f6;
+}
+
 .modal__body {
   display: grid;
   gap: 16px;
