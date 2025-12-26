@@ -104,6 +104,21 @@ body {
   gap: 12px;
 }
 
+.menu__search {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.menu__search input {
+  flex: 1 1 240px;
+  border-radius: 999px;
+  border: 1px solid #d6dbe5;
+  padding: 10px 14px;
+  font-size: 14px;
+}
+
 .menu__filters {
   display: flex;
   gap: 8px;
@@ -131,6 +146,21 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.menu-card__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.menu-card__tags span {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #eef1f6;
+  color: #374151;
 }
 
 .receipt {
@@ -169,6 +199,26 @@ body {
   border-radius: 999px;
   padding: 6px 12px;
   cursor: pointer;
+}
+
+.filter-pill {
+  border: 1px solid #d4d8e5;
+  background: #fff;
+  border-radius: 999px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.filter-pill.active {
+  background: #fee2e2;
+  border-color: #fca5a5;
+  color: #991b1b;
+}
+
+.filter-pill.clear {
+  background: #f3f4f6;
+  border-color: #d1d5db;
 }
 
 .tab.active {

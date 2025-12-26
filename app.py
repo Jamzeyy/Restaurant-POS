@@ -14,20 +14,85 @@ app = Flask(__name__)
 class MenuItem:
     sku: str
     name: str
+    description: str
     price: float
     category: str
+    tags: list[str]
 
 
 MENU_ITEMS = [
-    MenuItem("DS-01", "Shrimp Dumplings", 7.5, "Dimsum"),
-    MenuItem("DS-02", "Pork Siu Mai", 6.75, "Dimsum"),
-    MenuItem("DS-03", "Veggie Spring Rolls", 5.25, "Dimsum"),
-    MenuItem("LN-01", "Kung Pao Chicken", 12.5, "Lunch"),
-    MenuItem("LN-02", "Beef Chow Fun", 13.25, "Lunch"),
-    MenuItem("LN-03", "Mapo Tofu", 11.0, "Lunch"),
-    MenuItem("DN-01", "Peking Duck", 28.0, "Dinner"),
-    MenuItem("DN-02", "Seafood Fried Rice", 16.5, "Dinner"),
-    MenuItem("DN-03", "Szechuan Eggplant", 14.25, "Dinner"),
+    MenuItem(
+        "DS-01",
+        "Shrimp Dumplings",
+        "Har gow with sweet shrimp and bamboo shoots.",
+        7.5,
+        "Dimsum",
+        ["seafood"],
+    ),
+    MenuItem(
+        "DS-02",
+        "Pork Siu Mai",
+        "Steamed pork dumplings with ginger and scallion.",
+        6.75,
+        "Dimsum",
+        [],
+    ),
+    MenuItem(
+        "DS-03",
+        "Veggie Spring Rolls",
+        "Crisp rolls with cabbage, carrots, and glass noodles.",
+        5.25,
+        "Dimsum",
+        ["vegetarian"],
+    ),
+    MenuItem(
+        "LN-01",
+        "Kung Pao Chicken",
+        "Wok-tossed chicken with peanuts and chili glaze.",
+        12.5,
+        "Lunch",
+        ["spicy"],
+    ),
+    MenuItem(
+        "LN-02",
+        "Beef Chow Fun",
+        "Stir-fried rice noodles with marinated beef and soy.",
+        13.25,
+        "Lunch",
+        [],
+    ),
+    MenuItem(
+        "LN-03",
+        "Mapo Tofu",
+        "Silken tofu in spicy fermented bean sauce.",
+        11.0,
+        "Lunch",
+        ["spicy", "vegetarian"],
+    ),
+    MenuItem(
+        "DN-01",
+        "Peking Duck",
+        "Crispy duck with pancakes, scallions, and hoisin.",
+        28.0,
+        "Dinner",
+        [],
+    ),
+    MenuItem(
+        "DN-02",
+        "Seafood Fried Rice",
+        "Jasmine rice with shrimp, scallop, and egg.",
+        16.5,
+        "Dinner",
+        ["seafood"],
+    ),
+    MenuItem(
+        "DN-03",
+        "Szechuan Eggplant",
+        "Braised eggplant with garlic, basil, and chili.",
+        14.25,
+        "Dinner",
+        ["spicy", "vegetarian"],
+    ),
 ]
 
 
@@ -104,8 +169,10 @@ def menu():
             {
                 "sku": item.sku,
                 "name": item.name,
+                "description": item.description,
                 "price": item.price,
                 "category": item.category,
+                "tags": item.tags,
             }
         )
     return jsonify({"categories": categories})

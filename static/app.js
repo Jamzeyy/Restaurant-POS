@@ -4,6 +4,8 @@ const state = {
   ticketItems: [],
   tip: 0,
   discount: 0,
+  searchTerm: "",
+  activeFilters: new Set(),
 };
 
 const currencyFormatter = new Intl.NumberFormat("en-US", {
@@ -14,6 +16,8 @@ const currencyFormatter = new Intl.NumberFormat("en-US", {
 const ticketItemsEl = document.getElementById("ticket-items");
 const menuItemsEl = document.getElementById("menu-items");
 const categoryTabsEl = document.getElementById("category-tabs");
+const menuSearchInput = document.getElementById("menu-search");
+const quickFiltersEl = document.getElementById("quick-filters");
 const itemCountEl = document.getElementById("item-count");
 const subtotalEl = document.getElementById("subtotal");
 const taxEl = document.getElementById("tax");
@@ -42,13 +46,25 @@ if (taxRateLabel) {
   taxRateLabel.textContent = `${(taxRate * 100).toFixed(2)}%`;
 }
 
+const quickFilters = [
+  { id: "spicy", label: "Spicy" },
+  { id: "vegetarian", label: "Vegetarian" },
+  { id: "seafood", label: "Seafood" },
+];
+
 const loadMenu = async () => {
   const response = await fetch("/api/menu");
   const data = await response.json();
   state.menu = data.categories;
   const categories = Object.keys(state.menu);
-  state.activeCategory = categories[0];
-  renderCategories(categories);
+  const preferredCategories = ["Dimsum", "Lunch", "Dinner"];
+  const orderedCategories = [
+    ...preferredCategories.filter((category) => categories.includes(category)),
+    ...categories.filter((category) => !preferredCategories.includes(category)),
+  ];
+  state.activeCategory = orderedCategories[0];
+  renderCategories(orderedCategories);
+  renderQuickFilters();
   renderMenuItems();
 };
 
@@ -67,16 +83,76 @@ const renderCategories = (categories) => {
   });
 };
 
+const renderQuickFilters = () => {
+  if (!quickFiltersEl) return;
+  quickFiltersEl.innerHTML = "";
+  quickFilters.forEach((filter) => {
+    const button = document.createElement("button");
+    button.textContent = filter.label;
+    button.className = state.activeFilters.has(filter.id)
+      ? "filter-pill active"
+      : "filter-pill";
+    button.addEventListener("click", () => {
+      if (state.activeFilters.has(filter.id)) {
+        state.activeFilters.delete(filter.id);
+      } else {
+        state.activeFilters.add(filter.id);
+      }
+      renderQuickFilters();
+      renderMenuItems();
+    });
+    quickFiltersEl.appendChild(button);
+  });
+
+  if (state.activeFilters.size > 0) {
+    const clearButton = document.createElement("button");
+    clearButton.textContent = "Clear";
+    clearButton.className = "filter-pill clear";
+    clearButton.addEventListener("click", () => {
+      state.activeFilters.clear();
+      renderQuickFilters();
+      renderMenuItems();
+    });
+    quickFiltersEl.appendChild(clearButton);
+  }
+};
+
 const renderMenuItems = () => {
   menuItemsEl.innerHTML = "";
   const items = state.menu[state.activeCategory] || [];
-  items.forEach((item) => {
+  const searchTerm = state.searchTerm.trim().toLowerCase();
+  const activeFilters = Array.from(state.activeFilters);
+  const filteredItems = items.filter((item) => {
+    const matchesSearch =
+      !searchTerm ||
+      item.name.toLowerCase().includes(searchTerm) ||
+      item.description.toLowerCase().includes(searchTerm);
+    const matchesFilters =
+      activeFilters.length === 0 ||
+      activeFilters.every((filter) => item.tags?.includes(filter));
+    return matchesSearch && matchesFilters;
+  });
+
+  if (filteredItems.length === 0) {
+    menuItemsEl.innerHTML =
+      "<p class='muted'>No menu items match your search and filters.</p>";
+    return;
+  }
+
+  filteredItems.forEach((item) => {
     const card = document.createElement("div");
     card.className = "menu-card";
+    const tags = item.tags?.length
+      ? `<div class="menu-card__tags">${item.tags
+          .map((tag) => `<span>${tag}</span>`)
+          .join("")}</div>`
+      : "";
     card.innerHTML = `
       <div>
         <h3>${item.name}</h3>
-        <p class="muted">${item.sku}</p>
+        <p class="muted">${item.description}</p>
+        <p class="muted">SKU ${item.sku}</p>
+        ${tags}
       </div>
       <div class="menu-card__footer">
         <span>${currencyFormatter.format(item.price)}</span>
@@ -252,6 +328,12 @@ submitOrderBtn.addEventListener("click", handleOrderSubmit);
 orderTypeSelect.addEventListener("change", updateOrderTypeUI);
 deliveryAddressInput.addEventListener("input", renderReceipt);
 deliveryContactInput.addEventListener("input", renderReceipt);
+if (menuSearchInput) {
+  menuSearchInput.addEventListener("input", (event) => {
+    state.searchTerm = event.target.value;
+    renderMenuItems();
+  });
+}
 
 loadMenu();
 renderTicket();
