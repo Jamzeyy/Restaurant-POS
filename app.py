@@ -46,6 +46,8 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             ticket_type TEXT NOT NULL,
             table_label TEXT,
+            delivery_address TEXT,
+            delivery_contact TEXT,
             created_at TEXT NOT NULL,
             subtotal REAL NOT NULL,
             tax REAL NOT NULL,
@@ -55,6 +57,8 @@ def init_db():
         )
         """
     )
+    ensure_column(cursor, "orders", "delivery_address", "TEXT")
+    ensure_column(cursor, "orders", "delivery_contact", "TEXT")
     cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS order_items (
@@ -71,6 +75,15 @@ def init_db():
     )
     connection.commit()
     connection.close()
+
+
+def ensure_column(cursor, table_name, column_name, column_type):
+    cursor.execute(f"PRAGMA table_info({table_name})")
+    existing_columns = {row[1] for row in cursor.fetchall()}
+    if column_name not in existing_columns:
+        cursor.execute(
+            f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}"
+        )
 
 
 @app.before_first_request
@@ -101,16 +114,24 @@ def menu():
 @app.route("/api/orders", methods=["POST"])
 def create_order():
     payload = request.get_json(force=True)
-    ticket_type = payload.get("ticketType")
+    order_type = payload.get("orderType")
     table_label = payload.get("tableLabel")
+    delivery_address = payload.get("deliveryAddress")
+    delivery_contact = payload.get("deliveryContact")
     items = payload.get("items", [])
     tip = float(payload.get("tip", 0))
     discount = float(payload.get("discount", 0))
 
-    if not ticket_type:
-        return jsonify({"error": "Ticket type is required."}), 400
-    if ticket_type == "table" and not table_label:
-        return jsonify({"error": "Table label is required for table tickets."}), 400
+    if not order_type:
+        return jsonify({"error": "Order type is required."}), 400
+    if order_type not in {"dine-in", "takeout", "delivery"}:
+        return jsonify({"error": "Order type is invalid."}), 400
+    if order_type == "dine-in" and not table_label:
+        return jsonify({"error": "Table label is required for dine-in orders."}), 400
+    if order_type == "delivery" and not delivery_address:
+        return jsonify({"error": "Delivery address is required."}), 400
+    if order_type == "delivery" and not delivery_contact:
+        return jsonify({"error": "Delivery contact is required."}), 400
     if not items:
         return jsonify({"error": "At least one item is required."}), 400
 
@@ -123,12 +144,15 @@ def create_order():
     cursor.execute(
         """
         INSERT INTO orders (
-            ticket_type, table_label, created_at, subtotal, tax, tip, discount, total
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ticket_type, table_label, delivery_address, delivery_contact, created_at,
+            subtotal, tax, tip, discount, total
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
-            ticket_type,
+            order_type,
             table_label,
+            delivery_address,
+            delivery_contact,
             datetime.utcnow().isoformat(),
             subtotal,
             tax,

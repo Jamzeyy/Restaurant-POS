@@ -43,6 +43,10 @@ body {
   margin-top: 24px;
 }
 
+.is-hidden {
+  display: none;
+}
+
 .ticket__controls {
   display: grid;
   gap: 12px;
