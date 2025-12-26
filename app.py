@@ -4,7 +4,7 @@ import json
 import sqlite3
 from flask import Flask, jsonify, render_template, request
 
-DB_PATH = "orders.db"
+DB_PATH = "/tmp/orders.db"
 TAX_RATE = 0.0825
 
 app = Flask(__name__)
