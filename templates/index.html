@@ -1,43 +1,90 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Dining Room</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
-  </head>
-  <body data-is-admin="{{ 'true' if is_admin else 'false' }}">
-    <header class="top-bar">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Restaurant POS</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <main class="pos">
+    <header class="pos__header">
       <div>
-        <h1>Dining Room</h1>
-        <p class="subtitle">Drag tables in edit mode. Click a table to open its ticket.</p>
+        <h1>Order Ticket</h1>
+        <p class="muted">Tie every order to a table or a takeout/delivery ticket.</p>
       </div>
-      <div class="actions">
-        {% if is_admin %}
-        <button id="edit-toggle" class="primary">Edit Layout</button>
-        <a class="link" href="{{ url_for('logout') }}">Log out</a>
-        {% else %}
-        <a class="link" href="{{ url_for('login', role='admin') }}">Admin login</a>
-        {% endif %}
-      </div>
+      <button class="primary" id="submit-order">Send Order</button>
     </header>
 
-    <main class="layout">
-      <section class="canvas" id="dining-canvas">
-        <div class="grid"></div>
-      </section>
+    <section class="pos__body">
+      <div class="ticket">
+        <div class="ticket__section">
+          <h2>Ticket Details</h2>
+          <div class="ticket__controls">
+            <label>
+              Ticket Type
+              <select id="ticket-type">
+                <option value="table">Table</option>
+                <option value="takeout">Takeout</option>
+                <option value="delivery">Delivery</option>
+              </select>
+            </label>
+            <label>
+              Table / Label
+              <input id="table-label" type="text" placeholder="Table 12 or Uber Eats" />
+            </label>
+          </div>
+        </div>
 
-      <aside class="ticket" id="ticket-panel">
-        <div class="ticket-header">
-          <h2>Order Ticket</h2>
-          <span id="ticket-table">Select a table</span>
+        <div class="ticket__section">
+          <div class="ticket__title-row">
+            <h2>Order Ticket</h2>
+            <span id="item-count">0 items</span>
+          </div>
+          <div id="ticket-items" class="ticket__items"></div>
         </div>
-        <div class="ticket-body" id="ticket-body">
-          <p class="muted">Open a table to view and start an order.</p>
+      </div>
+
+      <div class="menu">
+        <div class="menu__header">
+          <h2>Menu Browser</h2>
+          <div class="menu__filters" id="category-tabs"></div>
         </div>
+        <div id="menu-items" class="menu__items"></div>
+      </div>
+
+      <aside class="receipt">
+        <h2>Receipt Preview</h2>
+        <div class="receipt__line">
+          <span>Subtotal</span>
+          <strong id="subtotal">$0.00</strong>
+        </div>
+        <div class="receipt__line">
+          <span>Tax (<span id="tax-rate">0%</span>)</span>
+          <strong id="tax">$0.00</strong>
+        </div>
+        <label class="receipt__input">
+          Tip
+          <input id="tip" type="number" min="0" step="0.01" value="0" />
+        </label>
+        <label class="receipt__input">
+          Discount
+          <input id="discount" type="number" min="0" step="0.01" value="0" />
+        </label>
+        <div class="receipt__line total">
+          <span>Total</span>
+          <strong id="total">$0.00</strong>
+        </div>
+        <p class="muted" id="order-status">Ready to send.</p>
       </aside>
-    </main>
+    </section>
+  </main>
 
-    <script src="{{ url_for('static', filename='app.js') }}"></script>
-  </body>
+  <script>
+    window.POS_CONFIG = {
+      taxRate: {{ tax_rate }}
+    };
+  </script>
+  <script src="/static/app.js"></script>
+</body>
 </html>

@@ -1,126 +1,182 @@
-from __future__ import annotations
-
+from dataclasses import dataclass
+from datetime import datetime
+import json
 import sqlite3
-from dataclasses import asdict, dataclass
-from pathlib import Path
+from flask import Flask, jsonify, render_template, request
 
-from flask import Flask, jsonify, redirect, render_template, request, session, url_for
-
-BASE_DIR = Path(__file__).resolve().parent
-DB_PATH = BASE_DIR / "tables.db"
+DB_PATH = "orders.db"
+TAX_RATE = 0.0825
 
 app = Flask(__name__)
-app.secret_key = "dev-secret"
 
 
 @dataclass
-class Table:
-    id: int
-    label: str
-    x: float
-    y: float
-    width: float
-    height: float
+class MenuItem:
+    sku: str
+    name: str
+    price: float
+    category: str
 
 
-DEFAULT_TABLES = [
-    Table(id=1, label="Table 1", x=40, y=40, width=120, height=80),
-    Table(id=2, label="Table 2", x=200, y=40, width=120, height=80),
-    Table(id=3, label="Table 3", x=360, y=40, width=120, height=80),
-    Table(id=4, label="Booth 4", x=40, y=160, width=160, height=100),
+MENU_ITEMS = [
+    MenuItem("DS-01", "Shrimp Dumplings", 7.5, "Dimsum"),
+    MenuItem("DS-02", "Pork Siu Mai", 6.75, "Dimsum"),
+    MenuItem("DS-03", "Veggie Spring Rolls", 5.25, "Dimsum"),
+    MenuItem("LN-01", "Kung Pao Chicken", 12.5, "Lunch"),
+    MenuItem("LN-02", "Beef Chow Fun", 13.25, "Lunch"),
+    MenuItem("LN-03", "Mapo Tofu", 11.0, "Lunch"),
+    MenuItem("DN-01", "Peking Duck", 28.0, "Dinner"),
+    MenuItem("DN-02", "Seafood Fried Rice", 16.5, "Dinner"),
+    MenuItem("DN-03", "Szechuan Eggplant", 14.25, "Dinner"),
 ]
 
 
-def get_connection() -> sqlite3.Connection:
+def connect_db():
     connection = sqlite3.connect(DB_PATH)
     connection.row_factory = sqlite3.Row
     return connection
 
 
-def init_db() -> None:
-    with get_connection() as connection:
-        connection.execute(
-            """
-            CREATE TABLE IF NOT EXISTS tables (
-                id INTEGER PRIMARY KEY,
-                label TEXT NOT NULL,
-                x REAL NOT NULL,
-                y REAL NOT NULL,
-                width REAL NOT NULL,
-                height REAL NOT NULL
-            )
-            """
+def init_db():
+    connection = connect_db()
+    cursor = connection.cursor()
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS orders (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ticket_type TEXT NOT NULL,
+            table_label TEXT,
+            created_at TEXT NOT NULL,
+            subtotal REAL NOT NULL,
+            tax REAL NOT NULL,
+            tip REAL NOT NULL,
+            discount REAL NOT NULL,
+            total REAL NOT NULL
         )
-        cursor = connection.execute("SELECT COUNT(*) AS count FROM tables")
-        if cursor.fetchone()["count"] == 0:
-            connection.executemany(
-                """
-                INSERT INTO tables (id, label, x, y, width, height)
-                VALUES (:id, :label, :x, :y, :width, :height)
-                """,
-                [asdict(table) for table in DEFAULT_TABLES],
-            )
+        """
+    )
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS order_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            order_id INTEGER NOT NULL,
+            sku TEXT NOT NULL,
+            name TEXT NOT NULL,
+            quantity INTEGER NOT NULL,
+            price REAL NOT NULL,
+            total REAL NOT NULL,
+            FOREIGN KEY(order_id) REFERENCES orders(id)
+        )
+        """
+    )
+    connection.commit()
+    connection.close()
 
 
-def fetch_tables() -> list[Table]:
-    with get_connection() as connection:
-        rows = connection.execute(
-            "SELECT id, label, x, y, width, height FROM tables ORDER BY id"
-        ).fetchall()
-    return [Table(**dict(row)) for row in rows]
-
-
-@app.before_request
-def ensure_db() -> None:
+@app.before_first_request
+def setup_database():
     init_db()
 
 
 @app.route("/")
-def dining_room() -> str:
-    is_admin = session.get("role") == "admin"
-    return render_template("index.html", is_admin=is_admin)
+def index():
+    return render_template("index.html", tax_rate=TAX_RATE)
 
 
-@app.route("/login/<role>")
-def login(role: str):
-    session["role"] = role
-    return redirect(url_for("dining_room"))
-
-
-@app.route("/logout")
-def logout():
-    session.clear()
-    return redirect(url_for("dining_room"))
-
-
-@app.get("/api/tables")
-def list_tables():
-    return jsonify([asdict(table) for table in fetch_tables()])
-
-
-@app.put("/api/tables/<int:table_id>")
-def update_table(table_id: int):
-    payload = request.get_json(force=True)
-    if session.get("role") != "admin":
-        return jsonify({"error": "admin_required"}), 403
-
-    with get_connection() as connection:
-        connection.execute(
-            """
-            UPDATE tables
-            SET label = ?, x = ?, y = ?, width = ?, height = ?
-            WHERE id = ?
-            """,
-            (
-                payload.get("label"),
-                payload.get("x"),
-                payload.get("y"),
-                payload.get("width"),
-                payload.get("height"),
-                table_id,
-            ),
+@app.route("/api/menu")
+def menu():
+    categories = {}
+    for item in MENU_ITEMS:
+        categories.setdefault(item.category, []).append(
+            {
+                "sku": item.sku,
+                "name": item.name,
+                "price": item.price,
+                "category": item.category,
+            }
         )
-    return jsonify({"status": "ok"})
+    return jsonify({"categories": categories})
+
+
+@app.route("/api/orders", methods=["POST"])
+def create_order():
+    payload = request.get_json(force=True)
+    ticket_type = payload.get("ticketType")
+    table_label = payload.get("tableLabel")
+    items = payload.get("items", [])
+    tip = float(payload.get("tip", 0))
+    discount = float(payload.get("discount", 0))
+
+    if not ticket_type:
+        return jsonify({"error": "Ticket type is required."}), 400
+    if ticket_type == "table" and not table_label:
+        return jsonify({"error": "Table label is required for table tickets."}), 400
+    if not items:
+        return jsonify({"error": "At least one item is required."}), 400
+
+    subtotal = sum(item["price"] * item["quantity"] for item in items)
+    tax = round(subtotal * TAX_RATE, 2)
+    total = round(subtotal + tax + tip - discount, 2)
+
+    connection = connect_db()
+    cursor = connection.cursor()
+    cursor.execute(
+        """
+        INSERT INTO orders (
+            ticket_type, table_label, created_at, subtotal, tax, tip, discount, total
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            ticket_type,
+            table_label,
+            datetime.utcnow().isoformat(),
+            subtotal,
+            tax,
+            tip,
+            discount,
+            total,
+        ),
+    )
+    order_id = cursor.lastrowid
+
+    item_rows = [
+        (
+            order_id,
+            item["sku"],
+            item["name"],
+            item["quantity"],
+            item["price"],
+            item["price"] * item["quantity"],
+        )
+        for item in items
+    ]
+    cursor.executemany(
+        """
+        INSERT INTO order_items (
+            order_id, sku, name, quantity, price, total
+        ) VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        item_rows,
+    )
+    connection.commit()
+    connection.close()
+
+    return jsonify({"orderId": order_id, "total": total})
+
+
+@app.route("/api/orders/<int:order_id>")
+def get_order(order_id):
+    connection = connect_db()
+    cursor = connection.cursor()
+    cursor.execute("SELECT * FROM orders WHERE id = ?", (order_id,))
+    order = cursor.fetchone()
+    if not order:
+        connection.close()
+        return jsonify({"error": "Order not found."}), 404
+    cursor.execute("SELECT * FROM order_items WHERE order_id = ?", (order_id,))
+    items = [dict(row) for row in cursor.fetchall()]
+    connection.close()
+    return jsonify({"order": dict(order), "items": items})
 
 
 if __name__ == "__main__":

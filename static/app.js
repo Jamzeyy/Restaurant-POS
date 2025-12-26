@@ -1,171 +1,194 @@
-const canvas = document.getElementById("dining-canvas");
-const ticketTable = document.getElementById("ticket-table");
-const ticketBody = document.getElementById("ticket-body");
-const editToggle = document.getElementById("edit-toggle");
-const isAdmin = document.body.dataset.isAdmin === "true";
+const state = {
+  menu: {},
+  activeCategory: null,
+  ticketItems: [],
+  tip: 0,
+  discount: 0,
+};
 
-let tables = [];
-let editMode = false;
-let activeTableId = null;
+const currencyFormatter = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+});
 
-async function fetchTables() {
-  const response = await fetch("/api/tables");
-  tables = await response.json();
-  renderTables();
+const ticketItemsEl = document.getElementById("ticket-items");
+const menuItemsEl = document.getElementById("menu-items");
+const categoryTabsEl = document.getElementById("category-tabs");
+const itemCountEl = document.getElementById("item-count");
+const subtotalEl = document.getElementById("subtotal");
+const taxEl = document.getElementById("tax");
+const totalEl = document.getElementById("total");
+const tipInput = document.getElementById("tip");
+const discountInput = document.getElementById("discount");
+const orderStatusEl = document.getElementById("order-status");
+const ticketTypeSelect = document.getElementById("ticket-type");
+const tableLabelInput = document.getElementById("table-label");
+const submitOrderBtn = document.getElementById("submit-order");
+
+const taxRate = window.POS_CONFIG?.taxRate ?? 0;
+const taxRateLabel = document.getElementById("tax-rate");
+if (taxRateLabel) {
+  taxRateLabel.textContent = `${(taxRate * 100).toFixed(2)}%`;
 }
 
-function renderTables() {
-  canvas.querySelectorAll(".table-card").forEach((node) => node.remove());
-  tables.forEach((table) => {
-    const card = document.createElement("div");
-    card.className = "table-card";
-    if (table.id === activeTableId) {
-      card.classList.add("active");
-    }
-    if (editMode) {
-      card.classList.add("editable");
-    }
-    card.style.left = `${table.x}px`;
-    card.style.top = `${table.y}px`;
-    card.style.width = `${table.width}px`;
-    card.style.height = `${table.height}px`;
-    card.dataset.id = table.id;
-    card.textContent = table.label;
+const loadMenu = async () => {
+  const response = await fetch("/api/menu");
+  const data = await response.json();
+  state.menu = data.categories;
+  const categories = Object.keys(state.menu);
+  state.activeCategory = categories[0];
+  renderCategories(categories);
+  renderMenuItems();
+};
 
-    const resizeHandle = document.createElement("div");
-    resizeHandle.className = "resize-handle";
-    if (!editMode) {
-      resizeHandle.style.display = "none";
-    }
-
-    card.appendChild(resizeHandle);
-    canvas.appendChild(card);
-
-    card.addEventListener("click", (event) => {
-      if (editMode && (event.target === resizeHandle)) {
-        return;
-      }
-      openTable(table.id);
+const renderCategories = (categories) => {
+  categoryTabsEl.innerHTML = "";
+  categories.forEach((category) => {
+    const button = document.createElement("button");
+    button.textContent = category;
+    button.className = category === state.activeCategory ? "tab active" : "tab";
+    button.addEventListener("click", () => {
+      state.activeCategory = category;
+      renderCategories(categories);
+      renderMenuItems();
     });
-
-    if (editMode) {
-      enableDrag(card, table.id);
-      enableResize(card, resizeHandle, table.id);
-    }
+    categoryTabsEl.appendChild(button);
   });
-}
+};
 
-function openTable(tableId) {
-  activeTableId = tableId;
-  const table = tables.find((item) => item.id === tableId);
-  if (!table) return;
-
-  ticketTable.textContent = table.label;
-  ticketBody.innerHTML = "";
-  const list = document.createElement("ul");
-  list.className = "ticket-list";
-  ["House Salad", "Grilled Salmon", "Sparkling Water"].forEach((item, index) => {
-    const row = document.createElement("li");
-    row.className = "ticket-item";
-    row.innerHTML = `<span>${item}</span><span>#${index + 1}</span>`;
-    list.appendChild(row);
+const renderMenuItems = () => {
+  menuItemsEl.innerHTML = "";
+  const items = state.menu[state.activeCategory] || [];
+  items.forEach((item) => {
+    const card = document.createElement("div");
+    card.className = "menu-card";
+    card.innerHTML = `
+      <div>
+        <h3>${item.name}</h3>
+        <p class="muted">${item.sku}</p>
+      </div>
+      <div class="menu-card__footer">
+        <span>${currencyFormatter.format(item.price)}</span>
+        <button class="ghost">Quick Add</button>
+      </div>
+    `;
+    card.querySelector("button").addEventListener("click", () => addItem(item));
+    menuItemsEl.appendChild(card);
   });
-  ticketBody.appendChild(list);
-  renderTables();
-}
+};
 
-function enableDrag(card, tableId) {
-  let startX = 0;
-  let startY = 0;
-  let startLeft = 0;
-  let startTop = 0;
+const addItem = (item) => {
+  const existing = state.ticketItems.find((entry) => entry.sku === item.sku);
+  if (existing) {
+    existing.quantity += 1;
+  } else {
+    state.ticketItems.push({ ...item, quantity: 1 });
+  }
+  renderTicket();
+};
 
-  const onMouseMove = (event) => {
-    const deltaX = event.clientX - startX;
-    const deltaY = event.clientY - startY;
-    card.style.left = `${startLeft + deltaX}px`;
-    card.style.top = `${startTop + deltaY}px`;
-  };
+const updateQuantity = (sku, delta) => {
+  const entry = state.ticketItems.find((item) => item.sku === sku);
+  if (!entry) return;
+  entry.quantity = Math.max(0, entry.quantity + delta);
+  if (entry.quantity === 0) {
+    state.ticketItems = state.ticketItems.filter((item) => item.sku !== sku);
+  }
+  renderTicket();
+};
 
-  const onMouseUp = async () => {
-    document.removeEventListener("mousemove", onMouseMove);
-    document.removeEventListener("mouseup", onMouseUp);
-    const updated = updateTableFromElement(card, tableId);
-    await persistTable(updated);
-  };
+const renderTicket = () => {
+  ticketItemsEl.innerHTML = "";
+  if (state.ticketItems.length === 0) {
+    ticketItemsEl.innerHTML = "<p class='muted'>No items added yet.</p>";
+  }
+  state.ticketItems.forEach((item) => {
+    const row = document.createElement("div");
+    row.className = "ticket-row";
+    row.innerHTML = `
+      <div>
+        <strong>${item.name}</strong>
+        <p class="muted">${item.sku}</p>
+      </div>
+      <div class="ticket-row__controls">
+        <button class="ghost" data-action="decrease">-</button>
+        <span>${item.quantity}</span>
+        <button class="ghost" data-action="increase">+</button>
+        <span>${currencyFormatter.format(item.price * item.quantity)}</span>
+      </div>
+    `;
+    row.querySelector("[data-action='decrease']").addEventListener("click", () =>
+      updateQuantity(item.sku, -1)
+    );
+    row.querySelector("[data-action='increase']").addEventListener("click", () =>
+      updateQuantity(item.sku, 1)
+    );
+    ticketItemsEl.appendChild(row);
+  });
+  itemCountEl.textContent = `${state.ticketItems.length} items`;
+  renderReceipt();
+};
 
-  card.addEventListener("mousedown", (event) => {
-    if (event.target.classList.contains("resize-handle")) {
+const renderReceipt = () => {
+  const subtotal = state.ticketItems.reduce(
+    (acc, item) => acc + item.price * item.quantity,
+    0
+  );
+  const tax = subtotal * taxRate;
+  const total = subtotal + tax + state.tip - state.discount;
+
+  subtotalEl.textContent = currencyFormatter.format(subtotal);
+  taxEl.textContent = currencyFormatter.format(tax);
+  totalEl.textContent = currencyFormatter.format(total);
+};
+
+const handleOrderSubmit = async () => {
+  orderStatusEl.textContent = "Saving order...";
+  const ticketType = ticketTypeSelect.value;
+  const tableLabel = tableLabelInput.value.trim();
+
+  try {
+    const response = await fetch("/api/orders", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ticketType,
+        tableLabel,
+        tip: state.tip,
+        discount: state.discount,
+        items: state.ticketItems,
+      }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      orderStatusEl.textContent = data.error || "Unable to save order.";
+      orderStatusEl.classList.add("error");
       return;
     }
-    startX = event.clientX;
-    startY = event.clientY;
-    startLeft = parseFloat(card.style.left);
-    startTop = parseFloat(card.style.top);
-    document.addEventListener("mousemove", onMouseMove);
-    document.addEventListener("mouseup", onMouseUp);
-  });
-}
+    orderStatusEl.classList.remove("error");
+    orderStatusEl.textContent = `Order #${data.orderId} saved. Total ${currencyFormatter.format(
+      data.total
+    )}.`;
+    state.ticketItems = [];
+    renderTicket();
+  } catch (error) {
+    orderStatusEl.textContent = "Unable to save order.";
+    orderStatusEl.classList.add("error");
+  }
+};
 
-function enableResize(card, resizeHandle, tableId) {
-  let startX = 0;
-  let startY = 0;
-  let startWidth = 0;
-  let startHeight = 0;
+tipInput.addEventListener("input", (event) => {
+  state.tip = parseFloat(event.target.value || 0);
+  renderReceipt();
+});
 
-  const onMouseMove = (event) => {
-    const deltaX = event.clientX - startX;
-    const deltaY = event.clientY - startY;
-    const width = Math.max(80, startWidth + deltaX);
-    const height = Math.max(60, startHeight + deltaY);
-    card.style.width = `${width}px`;
-    card.style.height = `${height}px`;
-  };
+discountInput.addEventListener("input", (event) => {
+  state.discount = parseFloat(event.target.value || 0);
+  renderReceipt();
+});
 
-  const onMouseUp = async () => {
-    document.removeEventListener("mousemove", onMouseMove);
-    document.removeEventListener("mouseup", onMouseUp);
-    const updated = updateTableFromElement(card, tableId);
-    await persistTable(updated);
-  };
+submitOrderBtn.addEventListener("click", handleOrderSubmit);
 
-  resizeHandle.addEventListener("mousedown", (event) => {
-    event.stopPropagation();
-    startX = event.clientX;
-    startY = event.clientY;
-    startWidth = card.offsetWidth;
-    startHeight = card.offsetHeight;
-    document.addEventListener("mousemove", onMouseMove);
-    document.addEventListener("mouseup", onMouseUp);
-  });
-}
-
-function updateTableFromElement(card, tableId) {
-  const table = tables.find((item) => item.id === tableId);
-  if (!table) return null;
-  table.x = parseFloat(card.style.left);
-  table.y = parseFloat(card.style.top);
-  table.width = parseFloat(card.style.width);
-  table.height = parseFloat(card.style.height);
-  return table;
-}
-
-async function persistTable(table) {
-  if (!table) return;
-  await fetch(`/api/tables/${table.id}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(table),
-  });
-}
-
-if (editToggle) {
-  editToggle.addEventListener("click", () => {
-    editMode = !editMode;
-    editToggle.classList.toggle("is-active", editMode);
-    editToggle.textContent = editMode ? "Exit Edit" : "Edit Layout";
-    renderTables();
-  });
-}
-
-fetchTables();
+loadMenu();
+renderTicket();
+renderReceipt();
