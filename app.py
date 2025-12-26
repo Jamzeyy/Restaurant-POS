@@ -8,6 +8,7 @@ DB_PATH = "/tmp/orders.db"
 TAX_RATE = 0.0825
 
 app = Flask(__name__)
+app.config.setdefault("DB_INITIALIZED", False)
 
 
 @dataclass
@@ -373,9 +374,11 @@ def queue_receipt(connection, order_id, payment_id):
     return queue_print_job(connection, order_id, payment_id, "receipt", printer, content)
 
 
-@app.before_first_request
+@app.before_request
 def setup_database():
-    init_db()
+    if not app.config["DB_INITIALIZED"]:
+        init_db()
+        app.config["DB_INITIALIZED"] = True
 
 
 @app.route("/")
