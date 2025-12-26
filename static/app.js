@@ -1,0 +1,194 @@
+const state = {
+  menu: {},
+  activeCategory: null,
+  ticketItems: [],
+  tip: 0,
+  discount: 0,
+};
+
+const currencyFormatter = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+});
+
+const ticketItemsEl = document.getElementById("ticket-items");
+const menuItemsEl = document.getElementById("menu-items");
+const categoryTabsEl = document.getElementById("category-tabs");
+const itemCountEl = document.getElementById("item-count");
+const subtotalEl = document.getElementById("subtotal");
+const taxEl = document.getElementById("tax");
+const totalEl = document.getElementById("total");
+const tipInput = document.getElementById("tip");
+const discountInput = document.getElementById("discount");
+const orderStatusEl = document.getElementById("order-status");
+const ticketTypeSelect = document.getElementById("ticket-type");
+const tableLabelInput = document.getElementById("table-label");
+const submitOrderBtn = document.getElementById("submit-order");
+
+const taxRate = window.POS_CONFIG?.taxRate ?? 0;
+const taxRateLabel = document.getElementById("tax-rate");
+if (taxRateLabel) {
+  taxRateLabel.textContent = `${(taxRate * 100).toFixed(2)}%`;
+}
+
+const loadMenu = async () => {
+  const response = await fetch("/api/menu");
+  const data = await response.json();
+  state.menu = data.categories;
+  const categories = Object.keys(state.menu);
+  state.activeCategory = categories[0];
+  renderCategories(categories);
+  renderMenuItems();
+};
+
+const renderCategories = (categories) => {
+  categoryTabsEl.innerHTML = "";
+  categories.forEach((category) => {
+    const button = document.createElement("button");
+    button.textContent = category;
+    button.className = category === state.activeCategory ? "tab active" : "tab";
+    button.addEventListener("click", () => {
+      state.activeCategory = category;
+      renderCategories(categories);
+      renderMenuItems();
+    });
+    categoryTabsEl.appendChild(button);
+  });
+};
+
+const renderMenuItems = () => {
+  menuItemsEl.innerHTML = "";
+  const items = state.menu[state.activeCategory] || [];
+  items.forEach((item) => {
+    const card = document.createElement("div");
+    card.className = "menu-card";
+    card.innerHTML = `
+      <div>
+        <h3>${item.name}</h3>
+        <p class="muted">${item.sku}</p>
+      </div>
+      <div class="menu-card__footer">
+        <span>${currencyFormatter.format(item.price)}</span>
+        <button class="ghost">Quick Add</button>
+      </div>
+    `;
+    card.querySelector("button").addEventListener("click", () => addItem(item));
+    menuItemsEl.appendChild(card);
+  });
+};
+
+const addItem = (item) => {
+  const existing = state.ticketItems.find((entry) => entry.sku === item.sku);
+  if (existing) {
+    existing.quantity += 1;
+  } else {
+    state.ticketItems.push({ ...item, quantity: 1 });
+  }
+  renderTicket();
+};
+
+const updateQuantity = (sku, delta) => {
+  const entry = state.ticketItems.find((item) => item.sku === sku);
+  if (!entry) return;
+  entry.quantity = Math.max(0, entry.quantity + delta);
+  if (entry.quantity === 0) {
+    state.ticketItems = state.ticketItems.filter((item) => item.sku !== sku);
+  }
+  renderTicket();
+};
+
+const renderTicket = () => {
+  ticketItemsEl.innerHTML = "";
+  if (state.ticketItems.length === 0) {
+    ticketItemsEl.innerHTML = "<p class='muted'>No items added yet.</p>";
+  }
+  state.ticketItems.forEach((item) => {
+    const row = document.createElement("div");
+    row.className = "ticket-row";
+    row.innerHTML = `
+      <div>
+        <strong>${item.name}</strong>
+        <p class="muted">${item.sku}</p>
+      </div>
+      <div class="ticket-row__controls">
+        <button class="ghost" data-action="decrease">-</button>
+        <span>${item.quantity}</span>
+        <button class="ghost" data-action="increase">+</button>
+        <span>${currencyFormatter.format(item.price * item.quantity)}</span>
+      </div>
+    `;
+    row.querySelector("[data-action='decrease']").addEventListener("click", () =>
+      updateQuantity(item.sku, -1)
+    );
+    row.querySelector("[data-action='increase']").addEventListener("click", () =>
+      updateQuantity(item.sku, 1)
+    );
+    ticketItemsEl.appendChild(row);
+  });
+  itemCountEl.textContent = `${state.ticketItems.length} items`;
+  renderReceipt();
+};
+
+const renderReceipt = () => {
+  const subtotal = state.ticketItems.reduce(
+    (acc, item) => acc + item.price * item.quantity,
+    0
+  );
+  const tax = subtotal * taxRate;
+  const total = subtotal + tax + state.tip - state.discount;
+
+  subtotalEl.textContent = currencyFormatter.format(subtotal);
+  taxEl.textContent = currencyFormatter.format(tax);
+  totalEl.textContent = currencyFormatter.format(total);
+};
+
+const handleOrderSubmit = async () => {
+  orderStatusEl.textContent = "Saving order...";
+  const ticketType = ticketTypeSelect.value;
+  const tableLabel = tableLabelInput.value.trim();
+
+  try {
+    const response = await fetch("/api/orders", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ticketType,
+        tableLabel,
+        tip: state.tip,
+        discount: state.discount,
+        items: state.ticketItems,
+      }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      orderStatusEl.textContent = data.error || "Unable to save order.";
+      orderStatusEl.classList.add("error");
+      return;
+    }
+    orderStatusEl.classList.remove("error");
+    orderStatusEl.textContent = `Order #${data.orderId} saved. Total ${currencyFormatter.format(
+      data.total
+    )}.`;
+    state.ticketItems = [];
+    renderTicket();
+  } catch (error) {
+    orderStatusEl.textContent = "Unable to save order.";
+    orderStatusEl.classList.add("error");
+  }
+};
+
+tipInput.addEventListener("input", (event) => {
+  state.tip = parseFloat(event.target.value || 0);
+  renderReceipt();
+});
+
+discountInput.addEventListener("input", (event) => {
+  state.discount = parseFloat(event.target.value || 0);
+  renderReceipt();
+});
+
+submitOrderBtn.addEventListener("click", handleOrderSubmit);
+
+loadMenu();
+renderTicket();
+renderReceipt();
