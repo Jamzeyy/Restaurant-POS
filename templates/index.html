@@ -22,16 +22,26 @@
           <h2>Ticket Details</h2>
           <div class="ticket__controls">
             <label>
-              Ticket Type
-              <select id="ticket-type">
-                <option value="table">Table</option>
+              Order Type
+              <select id="order-type">
+                <option value="dine-in">Dine In</option>
                 <option value="takeout">Takeout</option>
                 <option value="delivery">Delivery</option>
               </select>
             </label>
             <label>
-              Table / Label
+              <span id="table-label-text">Table</span>
               <input id="table-label" type="text" placeholder="Table 12 or Uber Eats" />
+            </label>
+          </div>
+          <div class="ticket__controls is-hidden" id="delivery-fields">
+            <label>
+              Delivery Address
+              <input id="delivery-address" type="text" placeholder="123 Market St, Apt 4B" />
+            </label>
+            <label>
+              Contact Info
+              <input id="delivery-contact" type="text" placeholder="(415) 555-0199 or customer@email.com" />
             </label>
           </div>
         </div>
@@ -55,6 +65,18 @@
 
       <aside class="receipt">
         <h2>Receipt Preview</h2>
+        <div class="receipt__line">
+          <span>Order Type</span>
+          <strong id="receipt-order-type">Dine In</strong>
+        </div>
+        <div class="receipt__line is-hidden" id="receipt-delivery-address">
+          <span>Delivery Address</span>
+          <strong></strong>
+        </div>
+        <div class="receipt__line is-hidden" id="receipt-delivery-contact">
+          <span>Contact</span>
+          <strong></strong>
+        </div>
         <div class="receipt__line">
           <span>Subtotal</span>
           <strong id="subtotal">$0.00</strong>

@@ -21,8 +21,19 @@ const totalEl = document.getElementById("total");
 const tipInput = document.getElementById("tip");
 const discountInput = document.getElementById("discount");
 const orderStatusEl = document.getElementById("order-status");
-const ticketTypeSelect = document.getElementById("ticket-type");
+const orderTypeSelect = document.getElementById("order-type");
 const tableLabelInput = document.getElementById("table-label");
+const tableLabelText = document.getElementById("table-label-text");
+const deliveryFields = document.getElementById("delivery-fields");
+const deliveryAddressInput = document.getElementById("delivery-address");
+const deliveryContactInput = document.getElementById("delivery-contact");
+const receiptOrderTypeEl = document.getElementById("receipt-order-type");
+const receiptDeliveryAddressEl = document.getElementById(
+  "receipt-delivery-address"
+);
+const receiptDeliveryContactEl = document.getElementById(
+  "receipt-delivery-contact"
+);
 const submitOrderBtn = document.getElementById("submit-order");
 
 const taxRate = window.POS_CONFIG?.taxRate ?? 0;
@@ -137,23 +148,73 @@ const renderReceipt = () => {
   const tax = subtotal * taxRate;
   const total = subtotal + tax + state.tip - state.discount;
 
+  const orderType = orderTypeSelect?.value || "dine-in";
+  if (receiptOrderTypeEl) {
+    receiptOrderTypeEl.textContent = formatOrderType(orderType);
+  }
+  updateReceiptDeliveryDetails(orderType);
   subtotalEl.textContent = currencyFormatter.format(subtotal);
   taxEl.textContent = currencyFormatter.format(tax);
   totalEl.textContent = currencyFormatter.format(total);
 };
 
+const formatOrderType = (orderType) => {
+  switch (orderType) {
+    case "dine-in":
+      return "Dine In";
+    case "takeout":
+      return "Takeout";
+    case "delivery":
+      return "Delivery";
+    default:
+      return "Order";
+  }
+};
+
+const updateReceiptDeliveryDetails = (orderType) => {
+  if (!receiptDeliveryAddressEl || !receiptDeliveryContactEl) return;
+  const shouldShow = orderType === "delivery";
+  receiptDeliveryAddressEl.classList.toggle("is-hidden", !shouldShow);
+  receiptDeliveryContactEl.classList.toggle("is-hidden", !shouldShow);
+  if (shouldShow) {
+    const address = deliveryAddressInput?.value.trim() || "Address needed";
+    const contact = deliveryContactInput?.value.trim() || "Contact needed";
+    receiptDeliveryAddressEl.querySelector("strong").textContent = address;
+    receiptDeliveryContactEl.querySelector("strong").textContent = contact;
+  }
+};
+
+const updateOrderTypeUI = () => {
+  const orderType = orderTypeSelect?.value || "dine-in";
+  if (deliveryFields) {
+    deliveryFields.classList.toggle("is-hidden", orderType !== "delivery");
+  }
+  if (tableLabelText) {
+    tableLabelText.textContent = orderType === "dine-in" ? "Table" : "Order Label";
+  }
+  if (tableLabelInput) {
+    tableLabelInput.placeholder =
+      orderType === "dine-in" ? "Table 12" : "Uber Eats, DoorDash";
+  }
+  renderReceipt();
+};
+
 const handleOrderSubmit = async () => {
   orderStatusEl.textContent = "Saving order...";
-  const ticketType = ticketTypeSelect.value;
+  const orderType = orderTypeSelect.value;
   const tableLabel = tableLabelInput.value.trim();
+  const deliveryAddress = deliveryAddressInput?.value.trim() || "";
+  const deliveryContact = deliveryContactInput?.value.trim() || "";
 
   try {
     const response = await fetch("/api/orders", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        ticketType,
+        orderType,
         tableLabel,
+        deliveryAddress,
+        deliveryContact,
         tip: state.tip,
         discount: state.discount,
         items: state.ticketItems,
@@ -188,7 +249,11 @@ discountInput.addEventListener("input", (event) => {
 });
 
 submitOrderBtn.addEventListener("click", handleOrderSubmit);
+orderTypeSelect.addEventListener("change", updateOrderTypeUI);
+deliveryAddressInput.addEventListener("input", renderReceipt);
+deliveryContactInput.addEventListener("input", renderReceipt);
 
 loadMenu();
 renderTicket();
 renderReceipt();
+updateOrderTypeUI();
