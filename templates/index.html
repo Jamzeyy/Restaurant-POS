@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dining Room</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+  </head>
+  <body data-is-admin="{{ 'true' if is_admin else 'false' }}">
+    <header class="top-bar">
+      <div>
+        <h1>Dining Room</h1>
+        <p class="subtitle">Drag tables in edit mode. Click a table to open its ticket.</p>
+      </div>
+      <div class="actions">
+        {% if is_admin %}
+        <button id="edit-toggle" class="primary">Edit Layout</button>
+        <a class="link" href="{{ url_for('logout') }}">Log out</a>
+        {% else %}
+        <a class="link" href="{{ url_for('login', role='admin') }}">Admin login</a>
+        {% endif %}
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="canvas" id="dining-canvas">
+        <div class="grid"></div>
+      </section>
+
+      <aside class="ticket" id="ticket-panel">
+        <div class="ticket-header">
+          <h2>Order Ticket</h2>
+          <span id="ticket-table">Select a table</span>
+        </div>
+        <div class="ticket-body" id="ticket-body">
+          <p class="muted">Open a table to view and start an order.</p>
+        </div>
+      </aside>
+    </main>
+
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+  </body>
+</html>
