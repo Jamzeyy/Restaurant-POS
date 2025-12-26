@@ -6,6 +6,8 @@ const state = {
   discount: 0,
   searchTerm: "",
   activeFilters: new Set(),
+  currentOrderId: null,
+  lastOrderTotal: 0,
 };
 
 const currencyFormatter = new Intl.NumberFormat("en-US", {
@@ -39,6 +41,23 @@ const receiptDeliveryContactEl = document.getElementById(
   "receipt-delivery-contact"
 );
 const submitOrderBtn = document.getElementById("submit-order");
+const takePaymentBtn = document.getElementById("take-payment");
+const paymentMethodEl = document.getElementById("payment-method");
+const paymentTenderedEl = document.getElementById("payment-tendered");
+const paymentChangeEl = document.getElementById("payment-change");
+const paymentStatusEl = document.getElementById("payment-status");
+const tenderModalEl = document.getElementById("tender-modal");
+const tenderTotalEl = document.getElementById("tender-total");
+const cashPanelEl = document.getElementById("cash-panel");
+const cardPanelEl = document.getElementById("card-panel");
+const cashTenderedInput = document.getElementById("cash-tendered");
+const cashChangeEl = document.getElementById("cash-change");
+const cardStatusEl = document.getElementById("card-status");
+const tenderErrorEl = document.getElementById("tender-error");
+const confirmPaymentBtn = document.getElementById("confirm-payment");
+const paymentMethodInputs = document.querySelectorAll(
+  "input[name='payment-method']"
+);
 
 const taxRate = window.POS_CONFIG?.taxRate ?? 0;
 const taxRateLabel = document.getElementById("tax-rate");
@@ -171,6 +190,7 @@ const addItem = (item) => {
   } else {
     state.ticketItems.push({ ...item, quantity: 1 });
   }
+  markOrderDirty();
   renderTicket();
 };
 
@@ -181,6 +201,7 @@ const updateQuantity = (sku, delta) => {
   if (entry.quantity === 0) {
     state.ticketItems = state.ticketItems.filter((item) => item.sku !== sku);
   }
+  markOrderDirty();
   renderTicket();
 };
 
@@ -216,13 +237,18 @@ const renderTicket = () => {
   renderReceipt();
 };
 
-const renderReceipt = () => {
+const calculateTotals = () => {
   const subtotal = state.ticketItems.reduce(
     (acc, item) => acc + item.price * item.quantity,
     0
   );
   const tax = subtotal * taxRate;
   const total = subtotal + tax + state.tip - state.discount;
+  return { subtotal, tax, total };
+};
+
+const renderReceipt = () => {
+  const { subtotal, tax, total } = calculateTotals();
 
   const orderType = orderTypeSelect?.value || "dine-in";
   if (receiptOrderTypeEl) {
@@ -275,6 +301,70 @@ const updateOrderTypeUI = () => {
   renderReceipt();
 };
 
+const updatePaymentControls = () => {
+  if (!takePaymentBtn) return;
+  takePaymentBtn.disabled = !state.currentOrderId;
+};
+
+const updatePaymentSummary = (payment) => {
+  if (!paymentMethodEl || !paymentTenderedEl || !paymentChangeEl) return;
+  paymentMethodEl.textContent = payment.method === "card" ? "Credit Card" : "Cash";
+  paymentTenderedEl.textContent = currencyFormatter.format(payment.amountTendered);
+  paymentChangeEl.textContent = currencyFormatter.format(payment.changeDue);
+  if (paymentStatusEl) {
+    paymentStatusEl.textContent = `Payment ${payment.status} (${payment.reference}).`;
+  }
+};
+
+const markOrderDirty = () => {
+  if (!state.currentOrderId) return;
+  state.currentOrderId = null;
+  state.lastOrderTotal = 0;
+  updatePaymentControls();
+};
+
+const updateCashChange = () => {
+  const amountDue = state.lastOrderTotal;
+  const tendered = parseFloat(cashTenderedInput?.value || 0);
+  const change = Math.max(0, tendered - amountDue);
+  if (cashChangeEl) {
+    cashChangeEl.textContent = currencyFormatter.format(change);
+  }
+};
+
+const setTenderError = (message = "") => {
+  if (!tenderErrorEl) return;
+  tenderErrorEl.textContent = message;
+  tenderErrorEl.classList.toggle("is-hidden", !message);
+};
+
+const openTenderModal = () => {
+  if (!state.currentOrderId) {
+    orderStatusEl.textContent = "Send the order before taking payment.";
+    orderStatusEl.classList.add("error");
+    return;
+  }
+  orderStatusEl.classList.remove("error");
+  if (tenderTotalEl) {
+    tenderTotalEl.textContent = currencyFormatter.format(state.lastOrderTotal);
+  }
+  if (cashTenderedInput) {
+    cashTenderedInput.value = state.lastOrderTotal.toFixed(2);
+  }
+  updateCashChange();
+  setTenderError("");
+  if (cardStatusEl) {
+    cardStatusEl.textContent = "Awaiting authorization";
+  }
+  tenderModalEl?.classList.remove("is-hidden");
+  tenderModalEl?.setAttribute("aria-hidden", "false");
+};
+
+const closeTenderModal = () => {
+  tenderModalEl?.classList.add("is-hidden");
+  tenderModalEl?.setAttribute("aria-hidden", "true");
+};
+
 const handleOrderSubmit = async () => {
   orderStatusEl.textContent = "Saving order...";
   const orderType = orderTypeSelect.value;
@@ -306,6 +396,9 @@ const handleOrderSubmit = async () => {
     orderStatusEl.textContent = `Order #${data.orderId} saved. Total ${currencyFormatter.format(
       data.total
     )}.`;
+    state.currentOrderId = data.orderId;
+    state.lastOrderTotal = data.total;
+    updatePaymentControls();
     state.ticketItems = [];
     renderTicket();
   } catch (error) {
@@ -314,18 +407,85 @@ const handleOrderSubmit = async () => {
   }
 };
 
+const handlePaymentSubmit = async () => {
+  const selectedMethod = document.querySelector(
+    "input[name='payment-method']:checked"
+  )?.value;
+  if (!selectedMethod) {
+    setTenderError("Select a payment method.");
+    return;
+  }
+  const amountDue = state.lastOrderTotal;
+  const amountTendered =
+    selectedMethod === "cash"
+      ? parseFloat(cashTenderedInput?.value || 0)
+      : amountDue;
+  if (selectedMethod === "cash") {
+    if (amountTendered < amountDue) {
+      setTenderError("Cash tendered must cover the amount due.");
+      return;
+    }
+  }
+  setTenderError("");
+  confirmPaymentBtn.disabled = true;
+  if (cardStatusEl && selectedMethod === "card") {
+    cardStatusEl.textContent = "Authorizing...";
+  }
+
+  try {
+    const response = await fetch("/api/payments", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        orderId: state.currentOrderId,
+        method: selectedMethod,
+        amountTendered,
+      }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      setTenderError(data.error || "Unable to process payment.");
+      if (cardStatusEl && selectedMethod === "card") {
+        cardStatusEl.textContent = "Authorization failed";
+      }
+      confirmPaymentBtn.disabled = false;
+      return;
+    }
+    updatePaymentSummary(data);
+    orderStatusEl.textContent = `Payment recorded for Order #${data.orderId}.`;
+    orderStatusEl.classList.remove("error");
+    state.currentOrderId = null;
+    state.lastOrderTotal = 0;
+    updatePaymentControls();
+    closeTenderModal();
+  } catch (error) {
+    setTenderError("Unable to process payment.");
+    confirmPaymentBtn.disabled = false;
+    if (cardStatusEl && selectedMethod === "card") {
+      cardStatusEl.textContent = "Authorization failed";
+    }
+  } finally {
+    confirmPaymentBtn.disabled = false;
+  }
+};
+
 tipInput.addEventListener("input", (event) => {
   state.tip = parseFloat(event.target.value || 0);
+  markOrderDirty();
   renderReceipt();
 });
 
 discountInput.addEventListener("input", (event) => {
   state.discount = parseFloat(event.target.value || 0);
+  markOrderDirty();
   renderReceipt();
 });
 
 submitOrderBtn.addEventListener("click", handleOrderSubmit);
-orderTypeSelect.addEventListener("change", updateOrderTypeUI);
+orderTypeSelect.addEventListener("change", () => {
+  markOrderDirty();
+  updateOrderTypeUI();
+});
 deliveryAddressInput.addEventListener("input", renderReceipt);
 deliveryContactInput.addEventListener("input", renderReceipt);
 if (menuSearchInput) {
@@ -335,7 +495,25 @@ if (menuSearchInput) {
   });
 }
 
+takePaymentBtn?.addEventListener("click", openTenderModal);
+cashTenderedInput?.addEventListener("input", updateCashChange);
+confirmPaymentBtn?.addEventListener("click", handlePaymentSubmit);
+tenderModalEl?.querySelectorAll("[data-action='close']").forEach((button) => {
+  button.addEventListener("click", closeTenderModal);
+});
+paymentMethodInputs.forEach((input) => {
+  input.addEventListener("change", (event) => {
+    const method = event.target.value;
+    if (cashPanelEl && cardPanelEl) {
+      cashPanelEl.classList.toggle("is-hidden", method !== "cash");
+      cardPanelEl.classList.toggle("is-hidden", method !== "card");
+    }
+    setTenderError("");
+  });
+});
+
 loadMenu();
 renderTicket();
 renderReceipt();
 updateOrderTypeUI();
+updatePaymentControls();
