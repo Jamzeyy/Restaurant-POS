@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="dragonGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#dc2626;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#991b1b;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#fbbf24;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#d97706;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="16" fill="url(#dragonGrad)"/>
+  <path d="M32 12C24 12 18 18 18 26C18 30 20 33 23 35L20 42L24 40L26 44L28 41C29 41.5 30.5 42 32 42C33.5 42 35 41.5 36 41L38 44L40 40L44 42L41 35C44 33 46 30 46 26C46 18 40 12 32 12Z" fill="url(#goldGrad)"/>
+  <circle cx="27" cy="24" r="3" fill="#991b1b"/>
+  <circle cx="37" cy="24" r="3" fill="#991b1b"/>
+  <circle cx="27.5" cy="23.5" r="1" fill="white"/>
+  <circle cx="37.5" cy="23.5" r="1" fill="white"/>
+  <path d="M28 32C28 32 30 34 32 34C34 34 36 32 36 32" stroke="#991b1b" stroke-width="2" stroke-linecap="round"/>
+  <path d="M16 48L20 52L24 48L28 52L32 48L36 52L40 48L44 52L48 48" stroke="url(#goldGrad)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
+

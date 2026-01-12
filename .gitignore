@@ -1,0 +1,48 @@
+# Dependencies
+node_modules
+.pnp
+.pnp.js
+
+# Build
+dist
+build
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+venv
+.venv
+*.egg-info
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+.DS_Store
+
+# Testing
+coverage
+.nyc_output
+
+# Misc
+*.local
+.cache
+
